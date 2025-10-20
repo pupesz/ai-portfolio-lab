@@ -1,0 +1,65 @@
+# ==========================
+# Python
+# ==========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+env/
+venv/
+ENV/
+.venv*/
+venv*/
+env*/
+
+
+
+# Logs and temp files
+*.log
+*.tmp
+*.bak
+*.swp
+.DS_Store
+Thumbs.db
+
+# ==========================
+# Data and artifacts
+# ==========================
+data/raw/
+data/cache/
+data/*.csv
+data/*.parquet
+data/*.h5
+data/*.zip
+*.csv
+*.parquet
+*.h5
+*.zip
+
+# ==========================
+# Model files
+# ==========================
+*.pt
+*.pth
+*.onnx
+runs/
+checkpoints/
+outputs/
+
+# ==========================
+# Environment & config
+# ==========================
+.env
+.env.example
+*.yaml
+*.json
+
+# ==========================
+# IDEs / Editors
+# ==========================
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace

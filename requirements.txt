@@ -1,0 +1,8 @@
+pandas
+numpy
+torch
+yfinance
+ta
+requests
+matplotlib
+python-dotenv
