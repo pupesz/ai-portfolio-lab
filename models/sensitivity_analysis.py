@@ -39,10 +39,11 @@ from experiment.core import (
     regression_metrics,
 )
 from experiment.models_factory import MODEL_FACTORIES
-from experiment.trainer import predict, train_model
+from experiment.trainer import predict, train_model, train_predict_multiseed
 
 FIXED_TAUS = [0.0025, 0.005, 0.010]
 LOOKBACKS = [30, 60, 90]
+SEEDS = (42, 1, 7)
 
 
 def _signal(pred: np.ndarray, tau: float) -> np.ndarray:
@@ -52,8 +53,19 @@ def _signal(pred: np.ndarray, tau: float) -> np.ndarray:
     return s
 
 
-def threshold_sensitivity(symbols: List[str] = ALL_STOCKS, epochs: int = None) -> pd.DataFrame:
-    """Train once per stock/model at default lookback, re-threshold cheaply."""
+def threshold_sensitivity(
+    symbols: List[str] = ALL_STOCKS,
+    epochs: int = None,
+    cache: dict = None,
+) -> pd.DataFrame:
+    """
+    Re-threshold decisions WITHOUT retraining.
+
+    If a prediction `cache` from evaluate_universe is supplied, reuse those
+    multi-seed predictions (zero extra training). Otherwise train once per
+    stock/model here. Either way, each threshold is applied to the SAME
+    predictions, so the sweep isolates the threshold effect.
+    """
     rows = []
     tk = {"epochs": epochs} if epochs else {}
     for sym in symbols:
@@ -63,8 +75,10 @@ def threshold_sensitivity(symbols: List[str] = ALL_STOCKS, epochs: int = None) -
         tau_set = [("0.25%", 0.0025), ("0.50%", 0.005), ("1.00%", 0.010),
                    (f"vol({vol_tau*100:.2f}%)", vol_tau)]
         for model_name, factory in MODEL_FACTORIES.items():
-            model, _ = train_model(factory, data, verbose=False, **tk)
-            pred = predict(model, data.X_test)
+            if cache is not None and sym in cache and f"{model_name}_pred" in cache[sym]:
+                pred = cache[sym][f"{model_name}_pred"]
+            else:
+                pred, _ = train_predict_multiseed(factory, data, seeds=SEEDS, **tk)
             for tau_label, tau in tau_set:
                 cls = classification_metrics(y, pred, tau)
                 sig = _signal(pred, tau)
@@ -86,7 +100,7 @@ def threshold_sensitivity(symbols: List[str] = ALL_STOCKS, epochs: int = None) -
 
 
 def lookback_sensitivity(symbols: List[str] = ALL_STOCKS, epochs: int = None) -> pd.DataFrame:
-    """Re-train per lookback window (expensive)."""
+    """Re-train per lookback window (expensive; multi-seed averaged)."""
     rows = []
     tk = {"epochs": epochs} if epochs else {}
     for sym in symbols:
@@ -94,8 +108,7 @@ def lookback_sensitivity(symbols: List[str] = ALL_STOCKS, epochs: int = None) ->
             data = prepare_stock(sym, lookback=L)
             y = data.y_test.astype(np.float64)
             for model_name, factory in MODEL_FACTORIES.items():
-                model, _ = train_model(factory, data, verbose=False, **tk)
-                pred = predict(model, data.X_test)
+                pred, _ = train_predict_multiseed(factory, data, seeds=SEEDS, **tk)
                 reg = regression_metrics(y, pred)
                 dacc = directional_accuracy(y, pred)
                 sig = _signal(pred, 0.005)

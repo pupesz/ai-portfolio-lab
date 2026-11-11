@@ -25,7 +25,8 @@ from experiment.core import (
     load_combined,
 )
 from experiment.models_factory import DROPOUT, HIDDEN
-from experiment.trainer import BATCH_SIZE, EPOCHS, LR, PATIENCE, WEIGHT_DECAY
+from experiment.trainer import BATCH_SIZE, EPOCHS, GRAD_CLIP, LR, PATIENCE, WEIGHT_DECAY
+from experiment.evaluate_all import SEEDS
 
 
 def _fmt(df: pd.DataFrame, floatfmt="{:.4f}") -> str:
@@ -84,15 +85,21 @@ def build_summary() -> Path:
         {"Parameter": "Batch size", "TCN": BATCH_SIZE, "LSTM": BATCH_SIZE},
         {"Parameter": "Max epochs", "TCN": EPOCHS, "LSTM": EPOCHS},
         {"Parameter": "Early-stop patience", "TCN": PATIENCE, "LSTM": PATIENCE},
+        {"Parameter": "Gradient clip (max norm)", "TCN": GRAD_CLIP, "LSTM": GRAD_CLIP},
+        {"Parameter": "Seeds (ensemble mean)", "TCN": str(SEEDS), "LSTM": str(SEEDS)},
     ])
     A(arch.to_markdown(index=False))
+    A("")
+    A(f"> Reported metrics are the mean over {len(SEEDS)} random seeds "
+      f"{SEEDS}; `Pred_Std` in the regression table is the mean per-sample "
+      f"prediction std across seeds (model uncertainty).")
     A("")
 
     # ---- Chapter 6: regression & classification ----
     A("## Chapter 6 — Predictive Performance\n")
     A("### Regression metrics (TCN vs LSTM)\n")
     reg = metrics[metrics["Model"].isin(["TCN", "LSTM"])][
-        ["Symbol", "Model", "MAE", "MSE", "RMSE", "Directional_Acc"]
+        ["Symbol", "Model", "MAE", "MSE", "RMSE", "Pred_Std", "Directional_Acc"]
     ]
     A(_fmt(reg))
     A("")

@@ -61,7 +61,8 @@ def main():
 
     if not args.no_sensitivity:
         print("\n[3/5] Sensitivity analysis ...")
-        threshold_sensitivity(symbols, epochs=epochs)
+        # Threshold sweep reuses the already-trained prediction cache (no retrain).
+        threshold_sensitivity(symbols, epochs=epochs, cache=cache)
         lookback_sensitivity(symbols, epochs=epochs)
     else:
         print("\n[3/5] Sensitivity analysis skipped (--no-sensitivity)")

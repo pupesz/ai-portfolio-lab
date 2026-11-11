@@ -33,9 +33,10 @@ from experiment.core import (
 )
 from experiment.benchmark import benchmark_test_frame
 from experiment.models_factory import MODEL_FACTORIES
-from experiment.trainer import predict, train_model
+from experiment.trainer import predict, train_model, train_predict_multiseed
 
 COST = 0.0  # frictionless by default; set >0 to add transaction cost
+SEEDS = (42, 1, 7)  # multi-seed ensemble for defensible, low-noise numbers
 
 
 def _signal_from_pred(pred: np.ndarray, tau: float) -> np.ndarray:
@@ -50,6 +51,7 @@ def evaluate_universe(
     lookback: int = DEFAULT_LOOKBACK,
     tau: float = DEFAULT_TAU,
     epochs: int = None,
+    seeds: tuple = SEEDS,
     verbose: bool = True,
 ) -> Dict:
     """Run the full comparison; return rows + per-stock prediction cache."""
@@ -73,10 +75,11 @@ def evaluate_universe(
             "sector": "IT" if sym in IT_STOCKS else "Industrial",
         }
 
-        # ---- deep models (TCN, LSTM) ----
+        # ---- deep models (TCN, LSTM), multi-seed ensemble ----
         for model_name, factory in MODEL_FACTORIES.items():
-            model, tr = train_model(factory, data, verbose=False, **train_kwargs)
-            pred = predict(model, data.X_test)
+            pred, pred_std = train_predict_multiseed(
+                factory, data, seeds=seeds, **train_kwargs
+            )
             cache[sym][f"{model_name}_pred"] = pred
 
             reg = regression_metrics(data.y_test.astype(np.float64), pred)
@@ -91,6 +94,7 @@ def evaluate_universe(
                     "Sector": cache[sym]["sector"],
                     "Model": model_name,
                     **reg,
+                    "Pred_Std": float(np.mean(pred_std)),
                     "Directional_Acc": dacc,
                     **cls,
                     "CAGR": bt["CAGR"],
@@ -113,11 +117,15 @@ def evaluate_universe(
         cache[sym]["Benchmark_signal"] = bench_sig
         cache[sym]["Benchmark_next_return"] = bench_next
 
-        # Benchmark directional acc: sign of position vs realized fwd return.
+        # Benchmark directional acc: over days it takes a stance (signal != 0),
+        # does the position sign match the realized forward-return sign? Hold
+        # days (signal == 0) are excluded, not counted as misses -- otherwise a
+        # strategy that ever holds is unfairly penalised.
         valid = ~np.isnan(bench_fwd)
+        stance = valid & (bench_sig != 0)
         b_dacc = float(
-            np.mean(np.sign(bench_sig[valid]) == np.sign(bench_fwd[valid]))
-        ) if valid.any() else 0.0
+            np.mean(np.sign(bench_sig[stance]) == np.sign(bench_fwd[stance]))
+        ) if stance.any() else np.nan
         # Classification: treat benchmark signal as its class prediction.
         b_cls = _benchmark_classification(bench_sig[valid], bench_fwd[valid], tau)
         b_bt = backtest_from_signal(bench_sig, bench_next, cost=COST)
