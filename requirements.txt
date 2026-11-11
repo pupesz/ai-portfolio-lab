@@ -6,3 +6,4 @@ ta
 requests
 matplotlib
 python-dotenv
+tabulate

@@ -28,7 +28,8 @@ class TemporalBlock(nn.Module):
         return F.relu(y + self.downsample(x))
 
 class TCN(nn.Module):
-    def __init__(self, n_features, channels=64, levels=5, kernel_size=7, dropout=0.1, out_dim=1):
+    def __init__(self, n_features, channels=64, levels=5, kernel_size=7, dropout=0.1, out_dim=1,
+                 head_norm=False):
         super().__init__()
         layers = []
         in_ch = n_features
@@ -36,9 +37,14 @@ class TCN(nn.Module):
             layers.append(TemporalBlock(in_ch, channels, kernel_size, dilation=2**i, dropout=dropout))
             in_ch = channels
         self.net = nn.Sequential(*layers)
+        # LayerNorm before the head stabilises regression on a zero-centred
+        # target (the final TemporalBlock ends in ReLU, so without this the
+        # head sees only non-negative, large-magnitude activations and the
+        # predictions overshoot). Off by default to preserve original behaviour.
+        self.norm = nn.LayerNorm(channels) if head_norm else nn.Identity()
         self.head = nn.Linear(channels, out_dim)
 
     def forward(self, x):                 # x: (batch, time, features)
         x = x.transpose(1, 2)             # -> (batch, features, time)
         y = self.net(x)[:, :, -1]         # last timestep
-        return self.head(y)
+        return self.head(self.norm(y))
